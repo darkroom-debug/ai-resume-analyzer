@@ -6,6 +6,7 @@ import { usePuterStore } from "~/lib/puter";
 import {Link, useNavigate,useLocation} from "react-router";
 import {useEffect, useState} from "react";
 
+
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Resumind" },
