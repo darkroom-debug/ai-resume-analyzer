@@ -54,40 +54,23 @@ const upload = () => {
 
       setStatusText('Analyzing...')
 
-      try {
-        const feedback =await ai.feedback(
-          uploadedFile.path,
-          prepareInstructions({ jobTitle, jobDescription, AIResponseFormat: 'json' })
-        )
-        
-        if(feedback) {
-          const feedbackText = typeof feedback.message.content === 'string'? feedback.message.content:feedback.message.content[0].text;
-          data.feedback = JSON.parse(feedbackText);
-        } else {
-          console.warn('Feedback service unavailable, proceeding without analysis');
-          data.feedback = '';
-        }
-      } catch (feedbackError) {
-        console.error('Feedback error:', feedbackError);
-        data.feedback = '';
-      }
+    const feedback =await ai.feedback(
+      uploadedFile.path,
+      prepareInstructions({ jobTitle, jobDescription, AIResponseFormat: 'json' })
+    )
+    if(!feedback) return setStatusText('Error:Failed to analyze resume');
 
-      await kv.set(`resume:${uuid}`,JSON.stringify(data));
-      setStatusText('Analysis complete redirecting...');
-      console.log('Redirecting to:', `/resume/${uuid}`);
-      
-      setTimeout(() => {
-        navigate(`/resume/${uuid}`);
-      }, 1000);
-    } catch (error) {
-      console.error('Analysis error:', error);
-      setStatusText(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    const feedbackText = typeof feedback.message.content === 'string'? feedback.message.content:feedback.message.content[0].text;
+
+    data.feedback = JSON.parse(feedbackText);
+    await kv.set(`resume${uuid}`,JSON.stringify(data));
+    setStatusText('Analysis complet redirecting...');
+    console.log(data);
 
   }
 
 
-  const handleSubmit =(e:FormEvent<HTMLFormElement>)=>{
+   const handleSubmit = (e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();
     const form: HTMLFormElement | null =e.currentTarget.closest('form');
 
