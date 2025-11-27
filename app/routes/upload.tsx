@@ -19,71 +19,116 @@ const upload = () => {
     setFile(file)
   }
 
-  const handleAnalyze = async ({companyName,jobTitle,jobDescription,file}:{companyName:string,jobTitle:string,jobDescription:string,file:File}) =>{
-    try {
-      setIsProcessing(true);
-      setStatusText('Uploading the file...');
-      const uploadedFile =await fs.upload([file])
+ const handleAnalyze = async ({ companyName, jobTitle, jobDescription, file }) => {
+  try {
+    setIsProcessing(true);
+    setStatusText('Uploading the file...');
 
-      if(!uploadedFile) return setStatusText('Error :Faild to upload file');
+    // Check if Puter is initialized
+    if (!auth || !fs || !ai || !kv) {
+      console.error('Puter not initialized:', { auth, fs, ai, kv });
+      return setStatusText('Error: Puter services not initialized. Please refresh the page.');
+    }
 
-     
+    const uploadedFile = await fs.upload([file]);
+    if (!uploadedFile) {
+      console.error('File upload failed - no response');
+      return setStatusText('Error: Failed to upload file');
+    }
 
-      setStatusText('Converting to image...');
-          const imageFile = await convertPdfToImage(file);
-          if (!imageFile.file) {
-            console.error(imageFile.error); // Log the specific error
-            return setStatusText(`Error: ${imageFile.error}`); // Display the error to the user
-          }
+    setStatusText('Converting to image...');
+    const imageFile = await convertPdfToImage(file);
+    if (!imageFile || !imageFile.file) {
+      console.error('PDF to image conversion failed:', imageFile?.error || 'Unknown error');
+      return setStatusText(`Error: ${imageFile?.error || 'Failed to convert PDF'}`);
+    }
 
-      setStatusText('Uploading the image...');
-      const uploadeImage =await fs.upload([imageFile.file])
-       if(!uploadeImage) return setStatusText('Error :Faild to upload Image');
+    setStatusText('Uploading the image...');
+    const uploadedImage = await fs.upload([imageFile.file]);
+    if (!uploadedImage) {
+      console.error('Image upload failed - no response');
+      return setStatusText('Error: Failed to upload image');
+    }
 
-      setStatusText("Preparing data....");
+    setStatusText('Preparing data...');
+    const uuid = generateUUID();
 
-      const uuid =generateUUID();
-      const data ={
-        id:uuid,
-        resumePath:uploadedFile.path,
-        imagePath:uploadeImage.path,
-        companyName,jobTitle,jobDescription,
-        feedback:'',
-      }
-      await kv.set(`resume:${uuid}`,JSON.stringify(data))
+    const data = {
+      id: uuid,
+      resumePath: uploadedFile.path,
+      imagePath: uploadedImage.path,
+      companyName,
+      jobTitle,
+      jobDescription,
+      feedback: '',
+    };
 
-      setStatusText('Analyzing...')
+    await kv.set(`resume:${uuid}`, JSON.stringify(data));
 
-    const feedback =await ai.feedback(
+    setStatusText('Analyzing...');
+    const feedback = await ai.feedback(
       uploadedFile.path,
       prepareInstructions({ jobTitle, jobDescription, AIResponseFormat: 'json' })
-    )
-    if(!feedback) return setStatusText('Error:Failed to analyze resume');
+    );
 
-    const feedbackText = typeof feedback.message.content === 'string'? feedback.message.content:feedback.message.content[0].text;
+    if (!feedback) {
+      console.error('AI feedback returned null or undefined');
+      return setStatusText('Error: Failed to analyze resume');
+    }
+
+    const feedbackText =
+      typeof feedback.message?.content === 'string'
+        ? feedback.message.content
+        : feedback.message?.content?.[0]?.text;
+
+    if (!feedbackText) {
+      console.error('Could not extract feedback text from response:', feedback);
+      return setStatusText('Error: Invalid response format from AI');
+    }
 
     data.feedback = JSON.parse(feedbackText);
-    await kv.set(`resume${uuid}`,JSON.stringify(data));
-    setStatusText('Analysis complet redirecting...');
-    console.log(data);
 
-  }
+    await kv.set(`resume:${uuid}`, JSON.stringify(data));
 
+    setStatusText('Analysis complete, redirecting...');
+    console.log('Analysis successful:', data);
+    navigate(`/resume/${uuid}`);
 
-   const handleSubmit = (e:FormEvent<HTMLFormElement>)=>{
-    e.preventDefault();
-    const form: HTMLFormElement | null =e.currentTarget.closest('form');
-
-    if(!form) return;
-    const formData =new FormData(form);
-
-    const companyName =formData.get('company-name')as string;
-    const jobTitle =formData.get('job-title')as string;
-    const jobDescription =formData.get('job-description')as string;
+  } catch (err) {
+    let errorMessage = 'Unknown error';
     
-    if (!file) return;
-    handleAnalyze({companyName,jobTitle,jobDescription,file})
+    if (err instanceof Error) {
+      errorMessage = err.message;
+    } else if (typeof err === 'object' && err !== null) {
+      errorMessage = JSON.stringify(err, null, 2);
+    } else {
+      errorMessage = String(err);
+    }
+    
+    console.error('Full error object:', err);
+    console.error('Formatted error message:', errorMessage);
+    setStatusText(`Error: ${errorMessage}`);
+    setIsProcessing(false);
   }
+};
+
+
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  const form = e.currentTarget.closest('form');
+  if (!form) return;
+
+  const formData = new FormData(form);
+  const companyName = formData.get('company-name') as string;
+  const jobTitle = formData.get('job-title') as string;
+  const jobDescription = formData.get('job-description') as string;
+
+  if (!file) return;
+
+  handleAnalyze({ companyName, jobTitle, jobDescription, file });
+};
+
 
   return (
   <main className="bg-[url('/images/bg-main.svg')] bg-cover">
@@ -132,4 +177,4 @@ const upload = () => {
   </main>
 )}
 
-export default upload
+export default upload;
